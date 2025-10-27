@@ -58,7 +58,7 @@ jobs:
           prev_tag="v${prev_version}"
           echo "Looking for release $prev_tag"
       
-          url=$(gh release view "$prev_tag" --repo $GITHUB_REPOSITORY --json assets --jq '.assets[] | select(.name == "OmniSensContact.bin") | .url')
+          url=$(gh release view "$prev_tag" --repo $GITHUB_REPOSITORY --json assets --jq '.assets[] | select(.name == "OmniSenseContact.bin") | .url')
       
           if [ -z "$url" ]; then
             echo "No OmniSenseContact.bin found in release $prev_tag"
@@ -66,8 +66,8 @@ jobs:
           fi
       
           echo "Downloading from $url"
-          gh release download "$prev_tag" --repo $GITHUB_REPOSITORY --pattern "OmniSensContact.bin" --dir .
-          mv OmniSensContact.bin OmniSensContactold.bin
+          gh release download "$prev_tag" --repo $GITHUB_REPOSITORY --pattern "OmniSenseContact.bin" --dir .
+          mv OmniSenseContact.bin OmniSensContactold.bin
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -78,7 +78,7 @@ jobs:
           python OTAcreate/esp_delta_ota_patch_gen.py \
             create_patch --chip esp32c6 \
             --base_binary OmniSensContactold.bin \
-            --new_binary build/OmniSensContact.bin \
+            --new_binary build/OmniSenseContact.bin \
             --patch_file_name OTAcreate/Delta.bin
 
       - name: Run script to generate OTA
@@ -130,7 +130,7 @@ jobs:
           update_existing: true
           files: |
             OTAcreate/Zigbee_OTA_Client.ota
-            build/OmniSensContact.bin
+            build/OmniSenseContact.bin
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
