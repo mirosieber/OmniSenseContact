@@ -19,9 +19,9 @@
 
 /* Zigbee OTA configuration */
 // Increment this value when the running image is updated
-#define OTA_UPGRADE_RUNNING_FILE_VERSION 0x2
+#define OTA_UPGRADE_RUNNING_FILE_VERSION 0x3
 // Increment this value when the downloaded image is updated
-#define OTA_UPGRADE_DOWNLOADED_FILE_VERSION 0x3
+#define OTA_UPGRADE_DOWNLOADED_FILE_VERSION 0x4
 // The hardware version, this can be used to differentiate between
 #define OTA_UPGRADE_HW_VERSION 0x1
 // different hardware versions
@@ -171,7 +171,7 @@ extern "C" void app_main(void) {
       // Wait up to 60s for OTA to start. If it starts, wait until it finishes.
       EventBits_t started =
           xEventGroupWaitBits(ota_event_group, OTA_IN_PROGRESS_BIT, pdFALSE,
-                              pdFALSE, pdMS_TO_TICKS(10000));
+                              pdFALSE, pdMS_TO_TICKS(30000));
       if (started & OTA_IN_PROGRESS_BIT) {
         Serial.println(
             "OTA started within wait window: waiting for completion...");
