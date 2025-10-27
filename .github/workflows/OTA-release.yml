@@ -61,7 +61,7 @@ jobs:
           url=$(gh release view "$prev_tag" --repo $GITHUB_REPOSITORY --json assets --jq '.assets[] | select(.name == "OmniSensContact.bin") | .url')
       
           if [ -z "$url" ]; then
-            echo "No OmniSensContact.bin found in release $prev_tag"
+            echo "No OmniSenseContact.bin found in release $prev_tag"
             exit 1
           fi
       
