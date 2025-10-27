@@ -4,6 +4,10 @@
 #include "esp_delta_ota.h"
 #include "esp_zigbee_ota.h"
 
+// FreeRTOS event group used to signal OTA in-progress state
+#include "freertos/FreeRTOS.h"
+#include "freertos/event_groups.h"
+
 /* Zigbee temperature + humidity sensor configuration */
 #define CONTACT_SENSOR_ENDPOINT_NUMBER 10
 
@@ -30,6 +34,10 @@ uint8_t dataToSend = 2; // Binary and Battery values are reported in same
                         // endpoint, so 2 values are reported
 bool resend = false;
 
+// Event group to track OTA state (created in app_main)
+static EventGroupHandle_t ota_event_group = NULL;
+static const EventBits_t OTA_IN_PROGRESS_BIT = (1 << 0);
+
 /************************ Callbacks *****************************/
 void onGlobalResponse(zb_cmd_type_t command, esp_zb_zcl_status_t status,
                       uint8_t endpoint, uint16_t cluster) {
@@ -48,6 +56,22 @@ void onGlobalResponse(zb_cmd_type_t command, esp_zb_zcl_status_t status,
     default:
       break; // add more statuses like ESP_ZB_ZCL_STATUS_INVALID_VALUE,
              // ESP_ZB_ZCL_STATUS_TIMEOUT etc.
+    }
+  }
+}
+
+static void otaActiveCallback(bool state) {
+  // Keep callback short: just signal OTA start/stop via an EventGroup bit.
+  // This avoids blocking the Zigbee stack/task which drives the OTA transfer.
+  if (state) {
+    Serial.println("OTA Update started");
+    if (ota_event_group) {
+      xEventGroupSetBits(ota_event_group, OTA_IN_PROGRESS_BIT);
+    }
+  } else {
+    Serial.println("OTA Update finished");
+    if (ota_event_group) {
+      xEventGroupClearBits(ota_event_group, OTA_IN_PROGRESS_BIT);
     }
   }
 }
@@ -75,6 +99,7 @@ extern "C" void app_main(void) {
   zbContact.addOTAClient(OTA_UPGRADE_RUNNING_FILE_VERSION,
                          OTA_UPGRADE_DOWNLOADED_FILE_VERSION,
                          OTA_UPGRADE_HW_VERSION);
+  zbContact.onOTAStateChange(otaActiveCallback);
 
   // Set power source to battery
   zbContact.setPowerSource(ZB_POWER_SOURCE_BATTERY);
@@ -114,10 +139,49 @@ extern "C" void app_main(void) {
   }
   Serial.println();
   Serial.println("Successfully connected to Zigbee network");
+  // Create OTA event group and register OTA state callback so we can
+  // pause main flow while an OTA is active (avoid deep-sleep during OTA).
+  static EventGroupHandle_t local_ota_event_group = NULL;
+  if (ota_event_group == NULL) {
+    ota_event_group = xEventGroupCreate();
+    local_ota_event_group = ota_event_group;
+    if (ota_event_group == NULL) {
+      Serial.println("Failed to create OTA event group");
+    }
+  }
+
+  // Register the non-blocking OTA state callback
+  zbContact.onOTAStateChange(otaActiveCallback);
+
+  // Request OTA update from server/coordinator
   zbContact.requestOTAUpdate();
 
-  // debuging halt
-  delay(10000);
+  // If the OTA bit is set, wait until it clears. If not set, wait a short
+  // window to see whether an OTA starts (60s). This avoids going to deep
+  // sleep while OTA is ongoing.
+  if (ota_event_group != NULL) {
+    EventBits_t bits = xEventGroupGetBits(ota_event_group);
+    if (bits & OTA_IN_PROGRESS_BIT) {
+      Serial.println("OTA in progress: waiting for completion...");
+      while (xEventGroupGetBits(ota_event_group) & OTA_IN_PROGRESS_BIT) {
+        vTaskDelay(pdMS_TO_TICKS(500));
+      }
+      Serial.println("OTA completed");
+    } else {
+      // Wait up to 60s for OTA to start. If it starts, wait until it finishes.
+      EventBits_t started =
+          xEventGroupWaitBits(ota_event_group, OTA_IN_PROGRESS_BIT, pdFALSE,
+                              pdFALSE, pdMS_TO_TICKS(10000));
+      if (started & OTA_IN_PROGRESS_BIT) {
+        Serial.println(
+            "OTA started within wait window: waiting for completion...");
+        while (xEventGroupGetBits(ota_event_group) & OTA_IN_PROGRESS_BIT) {
+          vTaskDelay(pdMS_TO_TICKS(500));
+        }
+        Serial.println("OTA completed");
+      }
+    }
+  }
 
   // Start Temperature sensor reading and reporting
 
