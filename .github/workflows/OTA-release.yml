@@ -1,0 +1,147 @@
+name: Generate and Release OTA
+
+on:
+  push:
+    branches:
+      - main
+      
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.6'
+
+      - name: Install dependencies
+        run: |
+          pip install zigpy || true
+          pip install esptool || true
+          pip install detools || true
+          
+
+# Could be recompiled, but it's unnecessary — the user commits their local, working binary anyway.
+#      - name: Build ESP32-C6 firmware with ESP-IDF v5.4.2
+#        uses: espressif/esp-idf-ci-action@v1
+#        with:
+#          esp_idf_version: v5.4.2
+#          path: '.'
+#          target: 'esp32c6'
+#          shell: bash
+#          run: idf.py build
+
+
+      - name: Extract OTA version from main.cpp
+        id: extract_version
+        run: |
+          VERSION_HEX=$(grep '^#define OTA_UPGRADE_RUNNING_FILE_VERSION' main/main.cpp | sed -E 's/^#define[[:space:]]+OTA_UPGRADE_RUNNING_FILE_VERSION[[:space:]]+(0x[0-9a-fA-F]+).*/\1/')
+          echo "Found hex version: $VERSION_HEX"
+
+          # Convert hex to decimal
+          VERSION_DEC=$((VERSION_HEX))
+
+          echo "version_hex=$VERSION_HEX" >> $GITHUB_OUTPUT
+          echo "version_dec=$VERSION_DEC" >> $GITHUB_OUTPUT
+
+      - name: Download previous release binary (based on version number)
+        id: download_old_bin
+        run: |
+          prev_version=$(( ${{ steps.extract_version.outputs.version_dec }} - 1 ))
+          prev_tag="v${prev_version}"
+          echo "Looking for release $prev_tag"
+      
+          url=$(gh release view "$prev_tag" --repo $GITHUB_REPOSITORY --json assets --jq '.assets[] | select(.name == "OmniSensHome.bin") | .url')
+      
+          if [ -z "$url" ]; then
+            echo "No OmniSensHome.bin found in release $prev_tag"
+            exit 1
+          fi
+      
+          echo "Downloading from $url"
+          gh release download "$prev_tag" --repo $GITHUB_REPOSITORY --pattern "OmniSensHome.bin" --dir .
+          mv OmniSensHome.bin OmniSensHomeold.bin
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+
+
+      - name: Run script to get Delta
+        run: | 
+          python OTAcreate/esp_delta_ota_patch_gen.py \
+            create_patch --chip esp32c6 \
+            --base_binary OmniSensHomeold.bin \
+            --new_binary build/OmniSensHome.bin \
+            --patch_file_name OTAcreate/Delta.bin
+
+      - name: Run script to generate OTA
+        run: |
+          python OTAcreate/image_builder_tool.py \
+            --create OTAcreate/Zigbee_OTA_Client.ota \
+            --manuf-id 0x1001 \
+            --image-type 0x1011 \
+            --version ${{ steps.extract_version.outputs.version_hex }} \
+            --tag-id 0x0000 \
+            --tag-file OTAcreate/Delta.bin
+
+      - name: Generate OTA index JSON with release URL
+        id: generate_index
+        run: |
+          VERSION_HEX=${{ steps.extract_version.outputs.version_hex }}
+          VERSION_DEC=$((VERSION_HEX))  # Convert hex to decimal
+          FILE="Zigbee_OTA_Client.ota"
+          SIZE=$(stat -c %s "OTAcreate/$FILE")
+
+          RELEASE_URL="https://github.com/mirosieber/OmniSensHome/releases/download/v$VERSION_DEC/$FILE"
+
+          cat <<EOF > my_index.json
+          [
+            {
+              "fileName": "$FILE",
+              "fileVersion": $VERSION_DEC,
+              "fileSize": $SIZE,
+              "url": "$RELEASE_URL",
+              "imageType": 4113,
+              "manufacturerCode": 4097,
+              "modelId": "OmniSenseHome"
+            }
+          ]
+          EOF
+
+          cat my_index.json
+
+
+      - name: Create GitHub Release (with OTA and Bin file)
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.extract_version.outputs.version_dec }}
+          name: "Release v${{ steps.extract_version.outputs.version_dec }}"
+          body: "Automated OTA file generated from latest push"
+          draft: false
+          prerelease: false
+          update_existing: true
+          files: |
+            OTAcreate/Zigbee_OTA_Client.ota
+            build/OmniSensHome.bin
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Commit my_index.json to repo
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+          git add my_index.json
+          git commit -m "Update OTA index (version ${{ steps.extract_version.outputs.version_dec }})" || echo "No changes"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
