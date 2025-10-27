@@ -58,16 +58,16 @@ jobs:
           prev_tag="v${prev_version}"
           echo "Looking for release $prev_tag"
       
-          url=$(gh release view "$prev_tag" --repo $GITHUB_REPOSITORY --json assets --jq '.assets[] | select(.name == "OmniSensHome.bin") | .url')
+          url=$(gh release view "$prev_tag" --repo $GITHUB_REPOSITORY --json assets --jq '.assets[] | select(.name == "OmniSensContact.bin") | .url')
       
           if [ -z "$url" ]; then
-            echo "No OmniSensHome.bin found in release $prev_tag"
+            echo "No OmniSensContact.bin found in release $prev_tag"
             exit 1
           fi
       
           echo "Downloading from $url"
-          gh release download "$prev_tag" --repo $GITHUB_REPOSITORY --pattern "OmniSensHome.bin" --dir .
-          mv OmniSensHome.bin OmniSensHomeold.bin
+          gh release download "$prev_tag" --repo $GITHUB_REPOSITORY --pattern "OmniSensContact.bin" --dir .
+          mv OmniSensContact.bin OmniSensContactold.bin
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -77,8 +77,8 @@ jobs:
         run: | 
           python OTAcreate/esp_delta_ota_patch_gen.py \
             create_patch --chip esp32c6 \
-            --base_binary OmniSensHomeold.bin \
-            --new_binary build/OmniSensHome.bin \
+            --base_binary OmniSensContactold.bin \
+            --new_binary build/OmniSensContact.bin \
             --patch_file_name OTAcreate/Delta.bin
 
       - name: Run script to generate OTA
@@ -99,7 +99,7 @@ jobs:
           FILE="Zigbee_OTA_Client.ota"
           SIZE=$(stat -c %s "OTAcreate/$FILE")
 
-          RELEASE_URL="https://github.com/mirosieber/OmniSensHome/releases/download/v$VERSION_DEC/$FILE"
+          RELEASE_URL="https://github.com/mirosieber/OmniSensContact/releases/download/v$VERSION_DEC/$FILE"
 
           cat <<EOF > my_index.json
           [
@@ -130,7 +130,7 @@ jobs:
           update_existing: true
           files: |
             OTAcreate/Zigbee_OTA_Client.ota
-            build/OmniSensHome.bin
+            build/OmniSensContact.bin
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
