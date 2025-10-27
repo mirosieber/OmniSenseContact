@@ -8,19 +8,19 @@
 #define CONTACT_SENSOR_ENDPOINT_NUMBER 10
 
 #define BUTTON_PIN_BITMASK (1ULL << GPIO_NUM_0) // GPIO 0 bitmask for ext1
-#define uS_TO_S_FACTOR                                                         \
-  1000000ULL                /* Conversion factor for micro seconds to seconds */
+/* Conversion factor for micro seconds to seconds */
+#define uS_TO_S_FACTOR 1000000ULL
 #define TIME_TO_SLEEP 86400 /* Sleep for max 1 day */
 #define REPORT_TIMEOUT 1000 /* Timeout for response from coordinator in ms */
 
 /* Zigbee OTA configuration */
-#define OTA_UPGRADE_RUNNING_FILE_VERSION                                       \
-  0x2 // Increment this value when the running image is updated
-#define OTA_UPGRADE_DOWNLOADED_FILE_VERSION                                    \
-  0x3 // Increment this value when the downloaded image is updated
-#define OTA_UPGRADE_HW_VERSION                                                 \
-  0x1 // The hardware version, this can be used to differentiate between
-      // different hardware versions
+// Increment this value when the running image is updated
+#define OTA_UPGRADE_RUNNING_FILE_VERSION 0x2
+// Increment this value when the downloaded image is updated
+#define OTA_UPGRADE_DOWNLOADED_FILE_VERSION 0x3
+// The hardware version, this can be used to differentiate between
+#define OTA_UPGRADE_HW_VERSION 0x1
+// different hardware versions
 
 uint8_t button = BOOT_PIN;
 
