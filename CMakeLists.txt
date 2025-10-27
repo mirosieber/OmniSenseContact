@@ -12,4 +12,4 @@ add_definitions(
 
 include_directories(${CMAKE_SOURCE_DIR}/managed_components/espressif__esp_delta_ota/include)
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
-project(OmniSensContact)
+project(OmniSenseContact)

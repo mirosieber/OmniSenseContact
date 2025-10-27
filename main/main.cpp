@@ -9,9 +9,9 @@
 
 #define BUTTON_PIN_BITMASK (1ULL << GPIO_NUM_0) // GPIO 0 bitmask for ext1
 #define uS_TO_S_FACTOR                                                         \
-  1000000ULL /* Conversion factor for micro seconds to seconds */
-#define TIME_TO_SLEEP 604800 /* Sleep for max 7 days */
-#define REPORT_TIMEOUT 1000  /* Timeout for response from coordinator in ms */
+  1000000ULL                /* Conversion factor for micro seconds to seconds */
+#define TIME_TO_SLEEP 86400 /* Sleep for max 1 day */
+#define REPORT_TIMEOUT 1000 /* Timeout for response from coordinator in ms */
 
 /* Zigbee OTA configuration */
 #define OTA_UPGRADE_RUNNING_FILE_VERSION                                       \
