@@ -99,7 +99,7 @@ jobs:
           FILE="Zigbee_OTA_Client.ota"
           SIZE=$(stat -c %s "OTAcreate/$FILE")
 
-          RELEASE_URL="https://github.com/mirosieber/OmniSensContact/releases/download/v$VERSION_DEC/$FILE"
+          RELEASE_URL="https://github.com/mirosieber/OmniSenseContact/releases/download/v$VERSION_DEC/$FILE"
 
           cat <<EOF > my_index.json
           [
@@ -110,7 +110,7 @@ jobs:
               "url": "$RELEASE_URL",
               "imageType": 4113,
               "manufacturerCode": 4097,
-              "modelId": "OmniSenseHome"
+              "modelId": "OmniSenseContact"
             }
           ]
           EOF
