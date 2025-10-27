@@ -15,9 +15,9 @@
 
 /* Zigbee OTA configuration */
 #define OTA_UPGRADE_RUNNING_FILE_VERSION                                       \
-  0x1 // Increment this value when the running image is updated
+  0x2 // Increment this value when the running image is updated
 #define OTA_UPGRADE_DOWNLOADED_FILE_VERSION                                    \
-  0x2 // Increment this value when the downloaded image is updated
+  0x3 // Increment this value when the downloaded image is updated
 #define OTA_UPGRADE_HW_VERSION                                                 \
   0x1 // The hardware version, this can be used to differentiate between
       // different hardware versions
@@ -50,77 +50,6 @@ void onGlobalResponse(zb_cmd_type_t command, esp_zb_zcl_status_t status,
              // ESP_ZB_ZCL_STATUS_TIMEOUT etc.
     }
   }
-}
-
-/************************ Contact sensor *****************************/
-static void meausureReportSleep(void *arg) {
-
-  // Read binary sensor value
-  pinMode(0, INPUT);
-  bool contact = digitalRead(0);
-
-  // Determan Wake up level so next wake up is wen contact is closed/open
-  esp_sleep_ext1_wakeup_mode_t level_mode;
-  Serial.print("Contact ist ");
-  if (contact) {
-    Serial.println("HIGH");
-    level_mode = ESP_EXT1_WAKEUP_ANY_LOW;
-  } else {
-    Serial.println("LOW");
-    level_mode = ESP_EXT1_WAKEUP_ANY_HIGH;
-  }
-
-  // Mesure Battery Voltage
-  float VBatt = get_Vbatt();
-
-  Serial.println("bis hier geht");
-  delay(10000);
-
-  uint8_t SOC = estimateSoC(VBatt);
-
-  // Update values in the End Point
-  zbContact.setBinaryInput(contact);
-  zbContact.setBatteryPercentage(SOC);
-
-  // Report values
-  zbContact.reportBatteryPercentage();
-  zbContact.reportBinaryInput();
-  Serial.printf("Reported Contact state: %s, Battery SOC: %d%%\r\n",
-                contact ? "HIGH" : "LOW", SOC);
-
-  unsigned long startTime = millis();
-  const unsigned long timeout = REPORT_TIMEOUT;
-
-  Serial.printf("Waiting for data report to be confirmed \r\n");
-  // Wait until data was successfully sent
-  int tries = 0;
-  const int maxTries = 3;
-  while (dataToSend != 0 && tries < maxTries) {
-    if (resend) {
-      Serial.println("Resending data on failure!");
-      resend = false;
-      dataToSend = 2;
-      zbContact.reportBatteryPercentage();
-      zbContact.reportBinaryInput(); // report again
-    }
-    if (millis() - startTime >= timeout) {
-      Serial.println("\nReport timeout! Report Again");
-      dataToSend = 2;
-      zbContact.reportBatteryPercentage();
-      zbContact.reportBinaryInput(); // report again
-      startTime = millis();
-      tries++;
-    }
-    Serial.printf(".");
-    delay(50); // 50ms delay to avoid busy-waiting
-  }
-
-  // IO wake up setzen
-  esp_sleep_enable_ext1_wakeup(BUTTON_PIN_BITMASK, level_mode);
-
-  // Put device to deep sleep after data was sent successfully or timeout
-  Serial.println("Going to sleep now");
-  esp_deep_sleep_start();
 }
 
 /***************** Main application entry point ****************/
@@ -190,9 +119,7 @@ extern "C" void app_main(void) {
   // debuging halt
   delay(10000);
 
-  // Start Temperature sensor reading task
-  // xTaskCreate(meausureReportSleep, "temp_sensor_update", 2048, NULL, 10,
-  // NULL);
+  // Start Temperature sensor reading and reporting
 
   // Read binary sensor value
   pinMode(0, INPUT);
