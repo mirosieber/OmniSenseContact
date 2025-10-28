@@ -108,7 +108,7 @@ jobs:
               "fileVersion": $VERSION_DEC,
               "fileSize": $SIZE,
               "url": "$RELEASE_URL",
-              "imageType": 4113,
+              "imageType": 4114,
               "manufacturerCode": 4097,
               "modelId": "OmniSenseContact"
             }
