@@ -98,7 +98,7 @@ extern "C" void app_main(void) {
 
   zbContact.addOTAClient(OTA_UPGRADE_RUNNING_FILE_VERSION,
                          OTA_UPGRADE_DOWNLOADED_FILE_VERSION,
-                         OTA_UPGRADE_HW_VERSION);
+                         OTA_UPGRADE_HW_VERSION, 0x1001, 0x1012);
   zbContact.onOTAStateChange(otaActiveCallback);
 
   // Set power source to battery
