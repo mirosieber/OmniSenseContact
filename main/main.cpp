@@ -1,7 +1,11 @@
 #include "Arduino.h"
 #include "Battery.h"
 #include "Zigbee.h"
+#include "esp_app_format.h"
 #include "esp_delta_ota.h"
+#include "esp_log.h"
+#include "esp_ota_ops.h"
+#include "esp_system.h"
 #include "esp_zigbee_ota.h"
 
 // FreeRTOS event group used to signal OTA in-progress state
@@ -19,9 +23,9 @@
 
 /* Zigbee OTA configuration */
 // Increment this value when the running image is updated
-#define OTA_UPGRADE_RUNNING_FILE_VERSION 0x3
+#define OTA_UPGRADE_RUNNING_FILE_VERSION 0x4
 // Increment this value when the downloaded image is updated
-#define OTA_UPGRADE_DOWNLOADED_FILE_VERSION 0x4
+#define OTA_UPGRADE_DOWNLOADED_FILE_VERSION 0x5
 // The hardware version, this can be used to differentiate between
 #define OTA_UPGRADE_HW_VERSION 0x1
 // different hardware versions
@@ -37,6 +41,18 @@ bool resend = false;
 // Event group to track OTA state (created in app_main)
 static EventGroupHandle_t ota_event_group = NULL;
 static const EventBits_t OTA_IN_PROGRESS_BIT = (1 << 0);
+
+static const char *TAG = "appinfo";
+
+void print_running_version() {
+  // easiest: pointer to running app's description (IDF provides this shortcut)
+  const esp_app_desc_t *app_desc = esp_ota_get_app_description();
+  if (app_desc != NULL) {
+    ESP_LOGI(TAG, "Running version: %s (project: %s, idf: %s)",
+             app_desc->version, app_desc->project_name, app_desc->idf_ver);
+    return;
+  }
+}
 
 /************************ Callbacks *****************************/
 void onGlobalResponse(zb_cmd_type_t command, esp_zb_zcl_status_t status,
@@ -85,6 +101,7 @@ extern "C" void app_main(void) {
   Serial.begin(115200);
 
   delay(8000);
+  print_running_version();
 
   // Init button switch
   pinMode(button, INPUT_PULLUP);
