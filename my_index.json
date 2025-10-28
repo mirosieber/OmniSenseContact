@@ -2,9 +2,9 @@
   {
     "fileName": "Zigbee_OTA_Client.ota",
     "fileVersion": 3,
-    "fileSize": 16086,
+    "fileSize": 16080,
     "url": "https://github.com/mirosieber/OmniSenseContact/releases/download/v3/Zigbee_OTA_Client.ota",
-    "imageType": 4113,
+    "imageType": 4114,
     "manufacturerCode": 4097,
     "modelId": "OmniSenseContact"
   }
