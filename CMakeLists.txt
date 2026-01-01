@@ -6,7 +6,6 @@ cmake_minimum_required(VERSION 3.5)
 add_definitions(
   -DARDUINO_USB_MODE
   -DARDUINO_USB_CDC_ON_BOOT
-  -DCONFIG_ZB_DELTA_OTA=1
 )
 
 
