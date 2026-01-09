@@ -1,25 +1,18 @@
 #include "Battery.h"
-#include "Ewma.h"
 #include "esp_log.h"
 #include <Arduino.h>
 
 static const char *TAG = "Battery";
 
-// Moving average filter for ADC readings
-Ewma adcFilter(0.3); // smoothing factor between 0 and 1 smaller = smoother
-
 // battery voltage
 float get_Vbatt(gpio_num_t pin, uint8_t samples) {
-  uint32_t Voltage = 0;
-  pinMode(pin, INPUT);
-  for (int i = 0; i < samples; i++) {
-    // Read and accumulate ADC voltage
-    Voltage += analogReadMilliVolts(pin);
-    delay(1);
-  }
+  const float R1 = 510.0;
+  const float R2 = 1000.0;
+  const double k = 1.03389; // k= soll Spannung / ist Spannung
+
+  uint32_t Voltage = analogReadMilliVolts(pin);
   // Apply EWMA filter and convert to volts
-  double Vbattf =
-      adcFilter.filter(static_cast<double>(Voltage) / samples) * 0.00152f;
+  double Vbattf = static_cast<double>(Voltage) * ((R1 + R2) / R2) * 0.001 * k;
   ESP_LOGI(TAG, "Vbatt: %.3f", Vbattf); // Output voltage to 3 decimal places
   return static_cast<float>(Vbattf);
 }

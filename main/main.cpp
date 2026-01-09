@@ -11,11 +11,19 @@
 static const char *TAG = "OmniSenseContact";
 
 #define BATT_VOLT_PIN GPIO_NUM_1
-#define CONTACT_PIN GPIO_NUM_0
+#define CONTACT1_PIN GPIO_NUM_2
+#define CONTACT2_PIN GPIO_NUM_3
+// Set to 0 to disable GPIO 3 as second contact
+#define CONTACT2_ENABLED 0
 #define CONTACT_SENSOR_ENDPOINT_NUMBER 10
 
-#define CONTACT1_PIN_BITMASK (1ULL << CONTACT_PIN) // GPIO 0 bitmask for ext1
-
+#define CONTACT1_PIN_BITMASK (1ULL << CONTACT1_PIN)
+#define CONTACT2_PIN_BITMASK (1ULL << CONTACT2_PIN)
+#if CONTACT2_ENABLED
+#define CONTACT_WAKE_MASK (CONTACT1_PIN_BITMASK | CONTACT2_PIN_BITMASK)
+#else
+#define CONTACT_WAKE_MASK (CONTACT1_PIN_BITMASK)
+#endif
 /* Conversion factor for micro seconds to seconds */
 #define uS_TO_S_FACTOR 1000000ULL
 #define TIME_TO_SLEEP 86400 /* Sleep for max 1 day */
@@ -52,11 +60,22 @@ void onGlobalResponse(zb_cmd_type_t command, esp_zb_zcl_status_t status,
   }
 }
 // Read contact sensor state
+static inline void configureContactPins() {
+  pinMode(CONTACT1_PIN, INPUT_PULLUP);
+#if CONTACT2_ENABLED
+  pinMode(CONTACT2_PIN, INPUT_PULLUP);
+#endif
+}
+
 bool readContact() {
-  pinMode(CONTACT_PIN, INPUT_PULLDOWN); // GPIO 0 with pulldown
-  bool contact = digitalRead(CONTACT_PIN);
-  // pinMode(CONTACT_PIN, INPUT); // reset to normal input to save power
-  return contact;
+  configureContactPins();
+  bool c1 = digitalRead(CONTACT1_PIN);
+#if CONTACT2_ENABLED
+  bool c2 = digitalRead(CONTACT2_PIN);
+  return c1 || c2; // treat either contact as active
+#else
+  return c1;
+#endif
 }
 
 bool initialBoot() {
@@ -99,7 +118,7 @@ extern "C" void app_main(void) {
     ESP_LOGE(TAG, "Rebooting...");
     ESP.restart(); // If Zigbee failed to start, reboot the device and try again
   }
-  ESP_LOGI(TAG, "Connecting to network");
+
   while (!Zigbee.connected()) {
     ESP_LOGI(TAG, ".");
     delay(100);
@@ -122,7 +141,7 @@ extern "C" void app_main(void) {
   uint8_t SOC = estimateSoC(VBatt);
 
   // Update values in the End Point
-  zbContact.setBinaryInput(contact);
+  zbContact.setBinaryInput(!contact);
   zbContact.setBatteryPercentage(SOC > 0 ? SOC : 1); // set min 1% to avoid 0%
 
   // Report values
@@ -153,8 +172,8 @@ extern "C" void app_main(void) {
       startTime = millis();
       tries++;
     }
-    ESP_LOGI(TAG, ".");
-    delay(50); // 50ms delay to avoid busy-waiting
+    // ESP_LOGI(TAG, ".");
+    delay(10); // 50ms delay to avoid busy-waiting
   }
 
   if (SOC < 10) {
@@ -166,20 +185,26 @@ extern "C" void app_main(void) {
     esp_sleep_ext1_wakeup_mode_t level_mode;
     if (contact) {
       ESP_LOGI(TAG, "Contact ist HIGH");
+      ESP_LOGI(TAG, "Window is closed");
       level_mode = ESP_EXT1_WAKEUP_ANY_LOW;
     } else {
       ESP_LOGI(TAG, "Contact ist LOW");
+      ESP_LOGI(TAG, "Window is opened");
       level_mode = ESP_EXT1_WAKEUP_ANY_HIGH;
     }
     // IO wake up setzen
-    esp_sleep_enable_ext1_wakeup(CONTACT1_PIN_BITMASK, level_mode);
+    esp_sleep_enable_ext1_wakeup(CONTACT_WAKE_MASK, level_mode);
     // Configure the wake up source and set to wake up every x days to stay
     // online
     esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
   }
   // Put device to deep sleep after data was sent successfully or timeout
   ESP_LOGI(TAG, "Going to sleep now");
-  rtc_gpio_hold_en(CONTACT_PIN); // hold GPIO state during deep sleep
+  rtc_gpio_hold_en(
+      (gpio_num_t)CONTACT1_PIN); // hold GPIO state during deep sleep
+#if CONTACT2_ENABLED
+  rtc_gpio_hold_en((gpio_num_t)CONTACT2_PIN);
+#endif
   esp_deep_sleep_start();
 
   for (;;) {
