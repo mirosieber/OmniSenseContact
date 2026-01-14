@@ -10,20 +10,15 @@
 
 static const char *TAG = "OmniSenseContact";
 
-#define BATT_VOLT_PIN GPIO_NUM_1
-#define CONTACT1_PIN GPIO_NUM_2
-#define CONTACT2_PIN GPIO_NUM_3
-// Set to 0 to disable GPIO 3 as second contact
-#define CONTACT2_ENABLED 0
+#define CHARGER_CONNECTED_PIN                                                  \
+  GPIO_NUM_0                     // Pin to detect if charger is connected
+#define BATT_VOLT_PIN GPIO_NUM_1 // Pin to read battery voltage
+#define CONTACT1_PIN GPIO_NUM_2  // Pin for contact sensor
 #define CONTACT_SENSOR_ENDPOINT_NUMBER 10
 
+#define CHARGER_CONNECTED_PIN_BITMASK (1ULL << CHARGER_CONNECTED_PIN)
 #define CONTACT1_PIN_BITMASK (1ULL << CONTACT1_PIN)
-#define CONTACT2_PIN_BITMASK (1ULL << CONTACT2_PIN)
-#if CONTACT2_ENABLED
-#define CONTACT_WAKE_MASK (CONTACT1_PIN_BITMASK | CONTACT2_PIN_BITMASK)
-#else
-#define CONTACT_WAKE_MASK (CONTACT1_PIN_BITMASK)
-#endif
+#define CONTACT_WAKE_MASK (CHARGER_CONNECTED_PIN_BITMASK | CONTACT1_PIN_BITMASK)
 /* Conversion factor for micro seconds to seconds */
 #define uS_TO_S_FACTOR 1000000ULL
 #define TIME_TO_SLEEP 86400 /* Sleep for max 1 day */
@@ -59,28 +54,49 @@ void onGlobalResponse(zb_cmd_type_t command, esp_zb_zcl_status_t status,
     }
   }
 }
-// Read contact sensor state
-static inline void configureContactPins() {
-  pinMode(CONTACT1_PIN, INPUT_PULLUP);
-#if CONTACT2_ENABLED
-  pinMode(CONTACT2_PIN, INPUT_PULLUP);
-#endif
-}
-
-bool readContact() {
-  configureContactPins();
-  bool c1 = digitalRead(CONTACT1_PIN);
-#if CONTACT2_ENABLED
-  bool c2 = digitalRead(CONTACT2_PIN);
-  return c1 || c2; // treat either contact as active
-#else
-  return c1;
-#endif
-}
 
 bool initialBoot() {
   esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
   return (wakeup_reason == ESP_SLEEP_WAKEUP_UNDEFINED);
+}
+
+void chargingLoop() {
+  // Initialize Serial communication at 115200 baud
+  Serial.begin(115200);
+  delay(1000); // Wait for Serial to be ready
+  Serial.printf("Git Repository: %s\n", GIT_REMOTE_URL);
+  Serial.printf("Git Version:    %s\n", GIT_VERSION);
+  Serial.printf("Git Branch:     %s\n", GIT_BRANCH);
+  Serial.println("Charger connected, entering charging loop");
+  while (digitalRead(CHARGER_CONNECTED_PIN)) {
+    float VBatt = get_Vbatt(BATT_VOLT_PIN);
+    uint8_t SOC = estimateSoC_filtered(VBatt);
+    Serial.println();
+    Serial.printf("Vbatt:          %.3f V, SoC: %d%%\n", VBatt, SOC);
+    Serial.println("To calibrate battery Voltage please type in the accurate "
+                   "voltage with 3 decimal accuracy:");
+
+    for (int i = 0; i < 100; i++) {
+      // Check if user has typed something send infos every 10 seconds
+      if (Serial.available() > 0) {
+        String userInput = Serial.readStringUntil('\n');
+        float calibrationVoltage = userInput.toFloat();
+
+        if (calibrationVoltage > 0 && calibrationVoltage < 5) {
+          Serial.printf("Calibration voltage received: %.3f V\n",
+                        calibrationVoltage);
+          calibrateVoltage(calibrationVoltage, BATT_VOLT_PIN);
+          Serial.println("Calibration complete.");
+          break; // Exit the for loop after successful input
+        } else {
+          Serial.println(
+              "Invalid voltage input. Please enter a value between 0 and 5V");
+        }
+      }
+      delay(100); // check every 100ms for user input
+    }
+  }
+  Serial.println("Charger disconnected / Battery full, exiting charging loop");
 }
 
 /***************** Main application entry point ****************/
@@ -88,6 +104,14 @@ bool initialBoot() {
 extern "C" void app_main(void) {
   // Initialize Arduino runtime
   initArduino();
+  pinMode(CHARGER_CONNECTED_PIN, INPUT);
+  pinMode(CONTACT1_PIN, INPUT_PULLUP);
+  battery_init(); // Initialize battery module (load calibration from NVS)
+
+  // wenn device gets charged:
+  if (digitalRead(CHARGER_CONNECTED_PIN)) {
+    chargingLoop();
+  }
 
   // Configure log levels for custom tags
   esp_log_level_set("OmniSenseContact", ESP_LOG_INFO);
@@ -126,19 +150,19 @@ extern "C" void app_main(void) {
   ESP_LOGI(TAG, "Successfully connected to Zigbee network");
   if (initialBoot()) {
     ESP_LOGI(TAG,
-             "Initial Boot detected wait 20 seconds until interview is done");
-    delay(20000);
+             "Initial Boot detected wait 60 seconds until interview is done");
+    delay(60000);
   } else {
     ESP_LOGI(TAG, "Wake up from Deep Sleep detected");
   }
 
   // Read binary sensor value
-  bool contact = readContact();
+  bool contact = digitalRead(CONTACT1_PIN);
   ESP_LOGI(TAG, "Contact ist %s", contact ? "HIGH" : "LOW");
 
   // Mesure Battery Voltage
-  float VBatt = get_Vbatt(BATT_VOLT_PIN, 16);
-  uint8_t SOC = estimateSoC(VBatt);
+  float VBatt = get_Vbatt(BATT_VOLT_PIN);
+  uint8_t SOC = estimateSoC_filtered(VBatt);
 
   // Update values in the End Point
   zbContact.setBinaryInput(!contact);
@@ -180,7 +204,7 @@ extern "C" void app_main(void) {
     ESP_LOGW(TAG, "Battery SOC is below 10%% Sleep forever to save battery");
   } else {
     // re read contact state to set correct wake up level
-    bool contact = readContact();
+    bool contact = digitalRead(CONTACT1_PIN);
     // Determan Wake up level so next wake up is wen contact is closed/open
     esp_sleep_ext1_wakeup_mode_t level_mode;
     if (contact) {
