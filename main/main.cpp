@@ -4,9 +4,12 @@
 #include "driver/rtc_io.h"
 #include "esp_app_format.h"
 #include "esp_log.h"
+#include "esp_pm.h"
 #include "esp_sleep.h"
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
+
+#define debug
 
 static const char *TAG = "OmniSenseContact";
 
@@ -18,7 +21,6 @@ static const char *TAG = "OmniSenseContact";
 
 #define CHARGER_CONNECTED_PIN_BITMASK (1ULL << CHARGER_CONNECTED_PIN)
 #define CONTACT1_PIN_BITMASK (1ULL << CONTACT1_PIN)
-#define CONTACT_WAKE_MASK (CHARGER_CONNECTED_PIN_BITMASK | CONTACT1_PIN_BITMASK)
 /* Conversion factor for micro seconds to seconds */
 #define uS_TO_S_FACTOR 1000000ULL
 #define TIME_TO_SLEEP 86400 /* Sleep for max 1 day */
@@ -30,6 +32,13 @@ ZigbeeBinary zbContact = ZigbeeBinary(CONTACT_SENSOR_ENDPOINT_NUMBER);
 uint8_t dataToSend = 2; // Binary and Battery values are reported in same
                         // endpoint, so 2 values are reported
 bool resend = false;    // flag to indicate data resend is needed
+
+// tiefer als 80MHz geht nicht, da Zigbee sonst nicht mehr läuft
+void cpu_power_config(void) {
+  esp_pm_config_t pm_config = {
+      .max_freq_mhz = 80, .min_freq_mhz = 80, .light_sleep_enable = false};
+  esp_pm_configure(&pm_config);
+}
 
 /************************ Callbacks *****************************/
 // Global response callback to handle responses for all endpoints
@@ -61,6 +70,8 @@ bool initialBoot() {
 }
 
 void chargingLoop() {
+  pinMode(15, OUTPUT);    // Onboard LED pin
+  digitalWrite(15, HIGH); // Turn the LED on
   // Initialize Serial communication at 115200 baud
   Serial.begin(115200);
   delay(1000); // Wait for Serial to be ready
@@ -80,6 +91,10 @@ void chargingLoop() {
       // Check if user has typed something send infos every 10 seconds
       if (Serial.available() > 0) {
         String userInput = Serial.readStringUntil('\n');
+        if (strcmp(userInput.c_str(), "s") == 0) {
+          Serial.println("Skipping charging as per user request.");
+          return;
+        }
         float calibrationVoltage = userInput.toFloat();
 
         if (calibrationVoltage > 0 && calibrationVoltage < 5) {
@@ -97,25 +112,46 @@ void chargingLoop() {
     }
   }
   Serial.println("Charger disconnected / Battery full, exiting charging loop");
+  Serial.end();
+#ifndef debug
+  // Disable UART0 (console)
+  esp_log_level_set("*", ESP_LOG_NONE); // Disable all logs
+  uart_driver_delete(UART_NUM_0);
+  gpio_reset_pin(GPIO_NUM_16); // TX pin on ESP32-C6
+  gpio_reset_pin(GPIO_NUM_17); // RX pin on ESP32-C6
+#endif
 }
 
 /***************** Main application entry point ****************/
 
 extern "C" void app_main(void) {
-  // Initialize Arduino runtime
+  cpu_power_config();
   initArduino();
+#ifdef debug
+  // Configure log levels for custom tags
+  esp_log_level_set("OmniSenseContact", ESP_LOG_INFO);
+  esp_log_level_set("Battery", ESP_LOG_INFO);
+#else
+  // Disable UART0 (console)
+  esp_log_level_set("*", ESP_LOG_NONE); // Disable all logs
+  uart_driver_delete(UART_NUM_0);
+  gpio_reset_pin(GPIO_NUM_16); // TX pin on ESP32-C6
+  gpio_reset_pin(GPIO_NUM_17); // RX pin on ESP32-C6
+#endif
+
   pinMode(CHARGER_CONNECTED_PIN, INPUT);
   pinMode(CONTACT1_PIN, INPUT_PULLUP);
   battery_init(); // Initialize battery module (load calibration from NVS)
+
+#ifdef debug
+  pinMode(15, OUTPUT);    // Onboard LED pin
+  digitalWrite(15, HIGH); // Turn the LED on
+#endif
 
   // wenn device gets charged:
   if (digitalRead(CHARGER_CONNECTED_PIN)) {
     chargingLoop();
   }
-
-  // Configure log levels for custom tags
-  esp_log_level_set("OmniSenseContact", ESP_LOG_INFO);
-  esp_log_level_set("Battery", ESP_LOG_INFO);
 
   // set Zigbee device setup
   zbContact.setManufacturerAndModel("Miro Sieber", "OmniSenseContact");
@@ -207,13 +243,17 @@ extern "C" void app_main(void) {
     bool contact = digitalRead(CONTACT1_PIN);
     // Determan Wake up level so next wake up is wen contact is closed/open
     esp_sleep_ext1_wakeup_mode_t level_mode;
+    uint64_t CONTACT_WAKE_MASK;
     if (contact) {
       ESP_LOGI(TAG, "Contact ist HIGH");
       ESP_LOGI(TAG, "Window is closed");
+      CONTACT_WAKE_MASK = (CONTACT1_PIN_BITMASK);
       level_mode = ESP_EXT1_WAKEUP_ANY_LOW;
     } else {
       ESP_LOGI(TAG, "Contact ist LOW");
       ESP_LOGI(TAG, "Window is opened");
+      CONTACT_WAKE_MASK =
+          (CHARGER_CONNECTED_PIN_BITMASK | CONTACT1_PIN_BITMASK);
       level_mode = ESP_EXT1_WAKEUP_ANY_HIGH;
     }
     // IO wake up setzen
@@ -226,9 +266,6 @@ extern "C" void app_main(void) {
   ESP_LOGI(TAG, "Going to sleep now");
   rtc_gpio_hold_en(
       (gpio_num_t)CONTACT1_PIN); // hold GPIO state during deep sleep
-#if CONTACT2_ENABLED
-  rtc_gpio_hold_en((gpio_num_t)CONTACT2_PIN);
-#endif
   esp_deep_sleep_start();
 
   for (;;) {
