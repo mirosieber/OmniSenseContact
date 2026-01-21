@@ -9,7 +9,8 @@
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 
-#define debug
+// #define debug
+//  zigbee debuging mus in menuconfig aktiviert werden
 
 static const char *TAG = "OmniSenseContact";
 
@@ -33,7 +34,7 @@ uint8_t dataToSend = 2; // Binary and Battery values are reported in same
                         // endpoint, so 2 values are reported
 bool resend = false;    // flag to indicate data resend is needed
 
-// tiefer als 80MHz geht nicht, da Zigbee sonst nicht mehr läuft
+// tiefer als 80MHz und light sleep geht nicht, da Zigbee sonst nicht mehr läuft
 void cpu_power_config(void) {
   esp_pm_config_t pm_config = {
       .max_freq_mhz = 80, .min_freq_mhz = 80, .light_sleep_enable = false};
@@ -129,6 +130,7 @@ extern "C" void app_main(void) {
   initArduino();
 #ifdef debug
   // Configure log levels for custom tags
+  esp_log_level_set("*", ESP_LOG_INFO);
   esp_log_level_set("OmniSenseContact", ESP_LOG_INFO);
   esp_log_level_set("Battery", ESP_LOG_INFO);
 #else
@@ -141,6 +143,11 @@ extern "C" void app_main(void) {
 
   pinMode(CHARGER_CONNECTED_PIN, INPUT);
   pinMode(CONTACT1_PIN, INPUT_PULLUP);
+
+  // Read binary sensor value
+  bool contact = digitalRead(CONTACT1_PIN);
+  ESP_LOGI(TAG, "Contact ist %s", contact ? "HIGH" : "LOW");
+
   battery_init(); // Initialize battery module (load calibration from NVS)
 
 #ifdef debug
@@ -192,10 +199,6 @@ extern "C" void app_main(void) {
     ESP_LOGI(TAG, "Wake up from Deep Sleep detected");
   }
 
-  // Read binary sensor value
-  bool contact = digitalRead(CONTACT1_PIN);
-  ESP_LOGI(TAG, "Contact ist %s", contact ? "HIGH" : "LOW");
-
   // Mesure Battery Voltage
   float VBatt = get_Vbatt(BATT_VOLT_PIN);
   uint8_t SOC = estimateSoC_filtered(VBatt);
@@ -239,8 +242,6 @@ extern "C" void app_main(void) {
   if (SOC < 10) {
     ESP_LOGW(TAG, "Battery SOC is below 10%% Sleep forever to save battery");
   } else {
-    // re read contact state to set correct wake up level
-    bool contact = digitalRead(CONTACT1_PIN);
     // Determan Wake up level so next wake up is wen contact is closed/open
     esp_sleep_ext1_wakeup_mode_t level_mode;
     uint64_t CONTACT_WAKE_MASK;
