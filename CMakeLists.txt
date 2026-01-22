@@ -8,7 +8,5 @@ add_definitions(
   -DARDUINO_USB_CDC_ON_BOOT
 )
 
-
-include_directories(${CMAKE_SOURCE_DIR}/managed_components/espressif__esp_delta_ota/include)
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(OmniSenseContact)
