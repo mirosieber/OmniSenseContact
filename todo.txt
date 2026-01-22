@@ -1,5 +1,0 @@
-akku laufzeit testen
-box verkleinern
-reset heraus führen
-kallibrieren via serial
-akku stand via serial

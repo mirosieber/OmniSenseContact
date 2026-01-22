@@ -25,7 +25,7 @@ OmniSenseContact is a Zigbee-based window/door contact sensor for smart home aut
 
 ### Components
 - **Battery**: 1S Li-Ion or Li-Po battery (3.7V nominal)
-- **Contact Sensor**: Magnetic reed switch or physical contact switch
+- **Contact Sensor**: **Normally Closed (NC)** magnetic reed switch or physical contact switch (required for energy efficiency)
 - **Voltage Dividers**: For battery and charger detection
   - Battery monitoring: R1: 510kΩ, R2: 1MΩ
   - Charger detection: R1: 510kΩ, R2: 1MΩ
@@ -63,20 +63,7 @@ git submodule update --init --recursive
 Follow the official ESP-IDF installation guide:
 https://docs.espressif.com/projects/esp-idf/en/latest/esp32c6/get-started/
 
-### 3. Configure the Project
-
-```bash
-cd OmniSenseContact
-idf.py set-target esp32c6
-idf.py menuconfig
-```
-
-In menuconfig:
-- Navigate to `Component config → FreeRTOS → Kernel`
-- Set `CONFIG_FREERTOS_HZ` to **1000** (default is 100)
-- This is **required** to avoid compilation errors
-
-### 4. Build and Flash
+### 3. Build and Flash
 
 ```bash
 idf.py build
