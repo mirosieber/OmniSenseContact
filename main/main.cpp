@@ -9,7 +9,7 @@
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 
-// #define debug
+#define debug
 //  zigbee debuging mus in menuconfig aktiviert werden
 
 static const char *TAG = "OmniSenseContact";
@@ -27,6 +27,7 @@ static const char *TAG = "OmniSenseContact";
 #define TIME_TO_SLEEP 86400 /* Sleep for max 1 day */
 #define REPORT_TIMEOUT 1000 /* Timeout for response from coordinator in ms */
 #define MAX_RETRIES 3       /* Max retries for sending data */
+bool factoryReset = false;  // flag to indicate if factory reset is needed
 
 ZigbeeBinary zbContact = ZigbeeBinary(CONTACT_SENSOR_ENDPOINT_NUMBER);
 
@@ -67,7 +68,7 @@ void onGlobalResponse(zb_cmd_type_t command, esp_zb_zcl_status_t status,
 
 bool initialBoot() {
   esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
-  return (wakeup_reason == ESP_SLEEP_WAKEUP_UNDEFINED);
+  return ((wakeup_reason == ESP_SLEEP_WAKEUP_UNDEFINED) || factoryReset);
 }
 
 void chargingLoop() {
@@ -96,12 +97,18 @@ void chargingLoop() {
           Serial.println("Skipping charging as per user request.");
           return;
         }
+        if (strcmp(userInput.c_str(), "r") == 0) {
+          Serial.println("Resetting zigbee settings...");
+          factoryReset = true;
+          return;
+        }
         float calibrationVoltage = userInput.toFloat();
 
         if (calibrationVoltage > 0 && calibrationVoltage < 5) {
           Serial.printf("Calibration voltage received: %.3f V\n",
                         calibrationVoltage);
-          calibrateVoltage(calibrationVoltage, BATT_VOLT_PIN);
+          calculateVoltageCalibration(calibrationVoltage, BATT_VOLT_PIN);
+          saveVoltageCalibration();
           Serial.println("Calibration complete.");
           break; // Exit the for loop after successful input
         } else {
@@ -180,10 +187,14 @@ extern "C" void app_main(void) {
   Zigbee.setTimeout(10000);
 
   // When all EPs are registered, start Zigbee in End Device mode
-  if (!Zigbee.begin(ZIGBEE_END_DEVICE, false)) {
+  if (!Zigbee.begin(ZIGBEE_END_DEVICE, factoryReset)) {
     ESP_LOGE(TAG, "Zigbee failed to start!");
     ESP_LOGE(TAG, "Rebooting...");
     ESP.restart(); // If Zigbee failed to start, reboot the device and try again
+  }
+  // resave current voltage calibration factor to NVS after factory reset
+  if (factoryReset) {
+    saveVoltageCalibration();
   }
 
   while (!Zigbee.connected()) {

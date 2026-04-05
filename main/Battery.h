@@ -13,9 +13,9 @@ float get_Vbatt(gpio_num_t pin);
 uint8_t estimateSoC_filtered(float voltage);
 // estimate State of Charge from 1S cell voltage
 uint8_t estimateSoC(float voltage);
-// calibrate voltage reading with known accurate voltage
-void calibrateVoltage(float accurateVoltage, gpio_num_t pin);
-
-static double get_Vbatt_uncalibrated(gpio_num_t pin);
+// calculate calibration factor from a known accurate voltage
+void calculateVoltageCalibration(float accurateVoltage, gpio_num_t pin);
+// save current calibration factor to NVS
+void saveVoltageCalibration();
 
 #endif // BATTERY_H

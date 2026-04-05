@@ -12,6 +12,7 @@ constexpr double DIVIDER = (R1 + R2) / R2;
 constexpr double MV_TO_V = 0.001;
 // k= soll Spannung(MultiM) / ist Spannung(ESP)
 static float calibrationFactor = 1.0;
+static double get_Vbatt_uncalibrated(gpio_num_t pin);
 
 // Initialize battery module - load calibration factor from NVS
 void battery_init() {
@@ -103,11 +104,13 @@ uint8_t estimateSoC(float voltage) {
   return 0; // sollte nie erreicht werden
 }
 
-void calibrateVoltage(float accurateVoltage, gpio_num_t pin) {
+void calculateVoltageCalibration(float accurateVoltage, gpio_num_t pin) {
   // Calculate calibration factor
   calibrationFactor = accurateVoltage / get_Vbatt_uncalibrated(pin);
   ESP_LOGI(TAG, "Calibration factor set to: %.5f", calibrationFactor);
+}
 
+void saveVoltageCalibration() {
   // Save to NVS
   nvs_handle_t nvs_handle;
   esp_err_t err = nvs_open("battery", NVS_READWRITE, &nvs_handle);
