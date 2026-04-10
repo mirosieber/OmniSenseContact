@@ -9,8 +9,8 @@
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 
-#define debug
-//  zigbee debuging mus in menuconfig aktiviert werden
+// #define debug
+//   zigbee debuging mus in menuconfig aktiviert werden
 
 static const char *TAG = "OmniSenseContact";
 
