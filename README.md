@@ -143,6 +143,7 @@ For accurate voltage readings:
 5. Calibration factor is saved to NVS
 
 Type `s` to skip charging loop.
+Type `reset` to factory reset the device.
 
 ### Low Battery Protection
 

@@ -93,11 +93,12 @@ void chargingLoop() {
       // Check if user has typed something send infos every 10 seconds
       if (Serial.available() > 0) {
         String userInput = Serial.readStringUntil('\n');
-        if (strcmp(userInput.c_str(), "s") == 0) {
+        userInput.trim();
+        if (userInput.equalsIgnoreCase("s")) {
           Serial.println("Skipping charging as per user request.");
           return;
         }
-        if (strcmp(userInput.c_str(), "r") == 0) {
+        if (userInput.equalsIgnoreCase("reset")) {
           Serial.println("Resetting zigbee settings...");
           factoryReset = true;
           return;
@@ -252,6 +253,8 @@ extern "C" void app_main(void) {
 
   if (SOC < 10) {
     ESP_LOGW(TAG, "Battery SOC is below 10%% Sleep forever to save battery");
+    esp_sleep_enable_ext1_wakeup(CHARGER_CONNECTED_PIN_BITMASK,
+                                 ESP_EXT1_WAKEUP_ANY_HIGH);
   } else {
     // Determan Wake up level so next wake up is wen contact is closed/open
     esp_sleep_ext1_wakeup_mode_t level_mode;
